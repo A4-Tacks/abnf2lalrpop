@@ -1,0 +1,12 @@
+string = "#string"
+ident  = r"[a-zA-Z0-9_\-]+"
+name   = r"[a-zA-Z0-9_\-]+\s+="
+atom = string / ident
+pat  = atom
+     / "*" pat
+     / "+" pat
+     / "(" [pats] ")"
+     / "["  pats  "]"
+pats = [pats] ident
+def  = name pats *("/" pats) [";"]
+defs = *def

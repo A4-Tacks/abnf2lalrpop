@@ -1,0 +1,13 @@
+[package]
+name = "abnf2lalrpop"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+trace = ["peg/trace"]
+
+[dependencies]
+fs-err = "3.2.2"
+getopts-macro = "0.1.9"
+peg = "0.8.5"
+smol_strc = "0.3.4"
