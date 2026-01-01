@@ -36,16 +36,23 @@ fn main() {
                 exit(2)
             },
         };
-        let defs = match parser::defs(&src) {
-            Ok(it) => it,
-            Err(e) => {
-                eprintln!("{e}");
-                exit(1)
-            },
-        };
-        println!("grammar;");
-        for def in defs {
-            println!("pub {def}")
-        }
+        gen_lalrpop(&src);
+    } else {
+        let src = std::io::read_to_string(std::io::stdin().lock()).unwrap();
+        gen_lalrpop(&src);
+    }
+}
+
+fn gen_lalrpop(src: &str) {
+    let defs = match parser::defs(src) {
+        Ok(it) => it,
+        Err(e) => {
+            eprintln!("{e}");
+            exit(1)
+        },
+    };
+    println!("grammar;");
+    for def in defs {
+        println!("pub {def}")
     }
 }
