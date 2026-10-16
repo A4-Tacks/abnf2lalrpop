@@ -6,8 +6,10 @@ edition = "2024"
 [features]
 trace = ["peg/trace"]
 
-[dependencies]
+[dev-dependencies]
 expect-test = "1.5.1"
+
+[dependencies]
 fs-err = "3.2.2"
 getopts-macro = "0.1.9"
 peg = "0.8.5"
