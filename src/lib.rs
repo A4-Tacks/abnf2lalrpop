@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashSet, fmt};
 
 use smol_strc::SmolStr;
 
@@ -36,24 +36,37 @@ peg::parser!(pub grammar parser() for str {
         / "+" _ p:pat() { Pat::Repeat(vec![p], '+') }
         / "(" _ list:pat()**_ _ ")" { Pat::List(list) }
         / "[" _ list:pat()++_ _ "]" { Pat::Repeat(list, '?') }
-    rule def() -> Rule
+    rule def(export: &Option<HashSet<SmolStr>>, inline: &Option<HashSet<SmolStr>>) -> Rule
         = name:ident() _ "=" _ body:(l:pat()++_ {Pat::List(l)})++(_ "/" _) (_ ";")?
         {
-            Rule { name, body }
+            let inline = inline.as_ref().is_some_and(|it| it.contains(&name));
+            let export = export.as_ref().is_none_or(|it| it.contains(&name));
+            Rule { name, body, inline, export }
         }
     pub rule defs() -> Vec<Rule>
-        = _ d:(d:def()_{d})* {d}
+        = _
+          export:("exports" _ "[" _ names:ident()++_ _ "]" _ {HashSet::from_iter(names)})?
+          inline:("inlines" _ "[" _ names:ident()++_ _ "]" _ {HashSet::from_iter(names)})?
+          d:(d:def(&export, &inline)_{d})* {d}
 });
 
 #[derive(Debug)]
 pub struct Rule {
+    inline: bool,
+    export: bool,
     name: SmolStr,
     body: Vec<Pat>,
 }
 
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { name, body } = self;
+        let Self { name, body, inline, export } = self;
+        if *inline {
+            write!(f, "#[inline]\n")?;
+        }
+        if *export {
+            write!(f, "pub ")?;
+        }
         write!(f, "{name}: () = {{\n")?;
         for pats in body {
             let pats = Some(pats).into_iter().flat_map(|pat| match pat {
@@ -114,6 +127,8 @@ fn fmt_pats(
 
 #[cfg(test)]
 mod tests {
+    use expect_test::expect;
+
     use super::*;
 
     #[test]
@@ -146,23 +161,34 @@ mod tests {
     #[test]
     fn it_works() {
         let src = r#"
+        exports [ z ]
+        inlines [ t ]
         x = "x"
         y = x "foo" extern-rule
           / x x
+        z = x
+        t = x
         "#;
-        let dst = r#"
-        x: () = {
-            "x" => (),
-        }
-        y: () = {
-            x "foo" extern_rule => (),
-            x x => (),
-        }"#;
+        let dst = expect![[r#"
+            x: () = {
+                "x" => (),
+            }
+            y: () = {
+                x "foo" extern_rule => (),
+                x x => (),
+            }
+            pub z: () = {
+                x => (),
+            }
+            #[inline]
+            t: () = {
+                x => (),
+            }
+        "#]];
         let defs = parser::defs(src).unwrap();
         let out = defs.iter()
-            .flat_map(|x| ["\n".into(), x.to_string()])
+            .flat_map(|x| [x.to_string(), "\n".into()])
             .collect::<String>();
-        let dst = dst.replace("\n        ", "\n");
-        assert_eq!(out, dst);
+        dst.assert_eq(&out);
     }
 }

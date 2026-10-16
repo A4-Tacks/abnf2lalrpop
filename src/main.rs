@@ -53,6 +53,6 @@ fn gen_lalrpop(src: &str) {
     };
     println!("grammar;");
     for def in defs {
-        println!("pub {def}")
+        println!("{def}")
     }
 }
