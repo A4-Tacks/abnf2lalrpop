@@ -9,4 +9,6 @@ pat  = atom
      / "["  pats  "]"
 pats = [pats] ident
 def  = name pats *("/" pats) [";"]
-defs = *def
+defs = ["exports" "[" +name "]"]
+       ["inlines" "[" +name "]"]
+       *def
