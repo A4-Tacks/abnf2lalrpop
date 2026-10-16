@@ -26,7 +26,8 @@ peg::parser!(pub grammar parser() for str {
             [_]
         )* "\"" #{lit(d)}}
         / expected!("string")
-    rule _() = quiet!{[' '|'\t'|'\r'|'\n']*}
+    rule comment() = ";" [^'\r'|'\n']*
+    rule _() = quiet!{[' '|'\t'|'\r'|'\n']* (comment() _)?}
     rule atom() -> SmolStr
         = s:$(string()) {s.into()}
         / i:ident() !(_ "=") {i}
@@ -166,6 +167,8 @@ mod tests {
         x = "x"
         y = x "foo" extern-rule
           / x x
+        ;comments
+        ;
         z = x
         t = x
         "#;
