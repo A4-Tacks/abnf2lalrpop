@@ -28,21 +28,25 @@ peg::parser!(pub grammar parser() for str {
         / expected!("string")
     rule comment() = ";" [^'\r'|'\n']*
     rule _() = quiet!{[' '|'\t'|'\r'|'\n']* (comment() _)?}
-    rule atom() -> SmolStr
-        = s:$(string()) {s.into()}
-        / i:ident() !(_ "=") {i}
+    rule args() -> Vec<Pat>
+        = "{" _ p:pat()++(_ "," _) _ "}" {p}
+    rule params() -> Vec<SmolStr>
+        = "{" _ p:ident()++(_ "," _) _ "}" {p}
     rule pat() -> Pat
-        = s:atom() { Pat::Atom(s) }
+        = i:ident() a:args()? !(_ "=") {Pat::Ref(i, a.unwrap_or_default())}
+        / s:$(string()) {Pat::Atom(s.into())}
         / "*" _ p:pat() { Pat::Repeat(vec![p], '*') }
         / "+" _ p:pat() { Pat::Repeat(vec![p], '+') }
         / "(" _ list:pat()**_ _ ")" { Pat::List(list) }
         / "[" _ list:pat()++_ _ "]" { Pat::Repeat(list, '?') }
     rule def(export: &Option<HashSet<SmolStr>>, inline: &Option<HashSet<SmolStr>>) -> Rule
-        = name:ident() _ "=" _ body:(l:pat()++_ {Pat::List(l)})++(_ "/" _) (_ ";")?
+        = name:ident()
+          params:params()?
+          _ "=" _ body:(l:pat()++_ {Pat::List(l)})++(_ "/" _) (_ ";")?
         {
             let inline = inline.as_ref().is_some_and(|it| it.contains(&name));
             let export = export.as_ref().is_none_or(|it| it.contains(&name));
-            Rule { name, body, inline, export }
+            Rule { name, params, body, inline, export }
         }
     pub rule defs() -> Vec<Rule>
         = _
@@ -56,19 +60,28 @@ pub struct Rule {
     inline: bool,
     export: bool,
     name: SmolStr,
+    params: Option<Vec<SmolStr>>,
     body: Vec<Pat>,
 }
 
 impl fmt::Display for Rule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let Self { name, body, inline, export } = self;
+        let Self { name, params, body, inline, export } = self;
         if *inline {
             write!(f, "#[inline]\n")?;
         }
         if *export {
             write!(f, "pub ")?;
         }
-        write!(f, "{name}: () = {{\n")?;
+        write!(f, "{name}")?;
+        if let Some(params) = params {
+            write!(f, "<{}", params[0])?;
+            for param in &params[1..] {
+                write!(f, ", {param}")?;
+            }
+            write!(f, ">")?;
+        }
+        write!(f, ": () = {{\n")?;
         for pats in body {
             let pats = Some(pats).into_iter().flat_map(|pat| match pat {
                 Pat::List(pats) => pats.as_slice(),
@@ -89,6 +102,7 @@ pub enum Pat {
     List(Vec<Pat>),
     Repeat(Vec<Pat>, char),
     Atom(SmolStr),
+    Ref(SmolStr, Vec<Pat>),
 }
 
 impl fmt::Display for Pat {
@@ -106,6 +120,16 @@ impl fmt::Display for Pat {
                 write!(f, "{ch}")?;
             },
             Pat::Atom(atom) => write!(f, "{atom}")?,
+            Pat::Ref(atom, args) => {
+                write!(f, "{atom}")?;
+                if let Some(first) = args.first() {
+                    write!(f, "<{first}")?;
+                    for arg in &args[1..] {
+                        write!(f, ", {arg}")?;
+                    }
+                    write!(f, ">")?;
+                }
+            },
         }
         Ok(())
     }
@@ -171,6 +195,8 @@ mod tests {
         ;
         z = x
         t = x
+        uses = comb{(a b), c}
+        comb{x,y}=*x y
         "#;
         let dst = expect![[r#"
             x: () = {
@@ -186,6 +212,12 @@ mod tests {
             #[inline]
             t: () = {
                 x => (),
+            }
+            uses: () = {
+                comb<(a b), c> => (),
+            }
+            comb<x, y>: () = {
+                x* y => (),
             }
         "#]];
         let defs = parser::defs(src).unwrap();
