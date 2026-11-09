@@ -48,4 +48,6 @@ tmp=$(mktemp XXXXXXXXXX.lalrpop)
 trap 'rm "$tmp"' exit
 
 abnf2lalrpop "$@" > "$tmp"
-lalrpop --color "$tmp" |& less -FRXS && rm "${tmp%.lalrpop}.rs"
+lalrpop --color "$tmp" |& less -FRXS &&
+    ls -lh "${tmp%.lalrpop}.rs" &&
+    rm "${tmp%.lalrpop}.rs"
